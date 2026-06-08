@@ -175,7 +175,7 @@ Tests in `schema.yml`: `not_null`, `unique`, `relationships`, `accepted_values`.
 ## Walkthrough video
 
 > Replace with your unlisted YouTube / Google Drive link:
-> **[Video walkthrough — TODO]**
+> **https://youtu.be/fWRc7VfsKDE**
 
 ---
 
