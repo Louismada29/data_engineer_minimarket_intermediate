@@ -172,10 +172,10 @@ Tests in `schema.yml`: `not_null`, `unique`, `relationships`, `accepted_values`.
 
 ---
 
-## Walkthrough video
+## Walkthrough video Beginner Level
 
-> Replace with your unlisted YouTube / Google Drive link:
-> **https://youtu.be/fWRc7VfsKDE**
+> YouTube link:
+> **https://youtu.be/Iv6rHv0v2SM**
 
 ---
 
@@ -306,6 +306,15 @@ Then:
 To demo incremental load: insert/update a few source rows (any tenant schema), re-trigger
 `minimarket_intermediate_pipeline`, and observe only changed rows being loaded (see task
 logs for `+N rows` per table).
+
+---
+
+## Walkthrough video Intermediate Level
+
+> YouTube link:
+> **https://youtu.be/fWRc7VfsKDE**
+
+---
 
 ## Intermediate service endpoints
 
