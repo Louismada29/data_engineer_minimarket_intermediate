@@ -1,0 +1,84 @@
+version: 2
+
+models:
+  - name: dim_customer
+    description: "Customer dimension."
+    columns:
+      - name: customer_key
+        description: "Surrogate key (hash of customer_id)."
+        data_tests: [not_null, unique]
+      - name: customer_id
+        description: "Natural key from the source system."
+        data_tests: [not_null, unique]
+      - name: city
+        description: "Customer city."
+
+  - name: dim_product
+    description: "Product dimension including category and brand."
+    columns:
+      - name: product_key
+        description: "Surrogate key (hash of product_id)."
+        data_tests: [not_null, unique]
+      - name: product_id
+        description: "Natural key from the source system."
+        data_tests: [not_null, unique]
+      - name: category
+        description: "Product category, used for the top-products-per-category analysis."
+      - name: unit_price
+        description: "List unit price (IDR)."
+        data_tests: [not_null]
+
+  - name: dim_date
+    description: "Date dimension generated from the transaction date range."
+    columns:
+      - name: date_key
+        description: "Surrogate key (hash of date_day)."
+        data_tests: [not_null, unique]
+      - name: date_day
+        description: "Calendar day."
+        data_tests: [not_null, unique]
+      - name: year_month
+        description: "YYYY-MM string for monthly trend grouping."
+        data_tests: [not_null]
+      - name: day_name
+        description: "Full weekday name."
+
+  - name: fact_sales
+    description: "Sales fact at transaction-item grain. Completed transactions only."
+    columns:
+      - name: sale_key
+        description: "Surrogate key (hash of item_id)."
+        data_tests: [not_null, unique]
+      - name: transaction_id
+        description: "Degenerate dimension; the originating transaction."
+        data_tests: [not_null]
+      - name: product_id
+        description: "FK to dim_product."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_id
+      - name: customer_id
+        description: "FK to dim_customer."
+        data_tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_id
+      - name: transaction_day
+        description: "FK to dim_date.date_day."
+        data_tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_day
+      - name: payment_method
+        description: "Tender type (degenerate dimension)."
+        data_tests:
+          - accepted_values:
+              values: ['cash', 'debit', 'credit', 'e-wallet']
+      - name: quantity
+        description: "Units sold."
+        data_tests: [not_null]
+      - name: subtotal
+        description: "Line revenue after discount (IDR)."
+        data_tests: [not_null]

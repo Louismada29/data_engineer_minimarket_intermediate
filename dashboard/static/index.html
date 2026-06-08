@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minimarket Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --red: #d7263d;
+      --red-soft: #f4a9b4;
+      --red-tint: #fdecef;
+      --ink: #2b2b2b;
+      --muted: #8a8a8a;
+      --line: #ececec;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #ffffff; color: var(--ink);
+      font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    header {
+      background: var(--red); color: #fff; padding: 22px 28px;
+    }
+    header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+    header p { margin: 4px 0 0; font-size: 13px; opacity: .9; }
+    .grid {
+      display: grid; gap: 18px; padding: 24px;
+      grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1200px; margin: 0 auto;
+    }
+    .card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 10px;
+      background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+    .card.wide { grid-column: 1 / -1; }
+    .card h2 { margin: 0 0 2px; font-size: 15px; color: var(--red); }
+    .card .q { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
+    .chart-wrap { position: relative; height: 300px; }
+    .err { color: var(--red); font-size: 13px; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 28px; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Minimarket Analytics Dashboard</h1>
+    <p>Multi-tenant sales insights · sumber: ClickHouse marts (dbt)</p>
+  </header>
+
+  <div class="grid">
+    <div class="card wide">
+      <h2>Q1 · Revenue per Toko per Bulan</h2>
+      <p class="q">Tren revenue tiap toko, 6 bulan terakhir.</p>
+      <div class="chart-wrap"><canvas id="c1"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Q2a · Promosi dengan Diskon Terbesar</h2>
+      <p class="q">Total discount applied per promosi (top 10).</p>
+      <div class="chart-wrap"><canvas id="c2a"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Q2b · Nilai Transaksi: Promo vs Non-Promo</h2>
+      <p class="q">Rata-rata nilai transaksi saat promo aktif vs tidak.</p>
+      <div class="chart-wrap"><canvas id="c2b"></canvas></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Q3 · Top 3 Produk per Kota</h2>
+      <p class="q">Produk terlaris berdasarkan revenue di tiap kota.</p>
+      <div class="chart-wrap" style="height:360px"><canvas id="c3"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Q4 · Segmentasi Pelanggan per Kota</h2>
+      <p class="q">Jumlah pelanggan High / Medium / Low spender.</p>
+      <div class="chart-wrap"><canvas id="c4"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Q5 · Transaksi per Hari</h2>
+      <p class="q">Jumlah transaksi & revenue per hari dalam seminggu.</p>
+      <div class="chart-wrap"><canvas id="c5"></canvas></div>
+    </div>
+  </div>
+
+  <footer>Technical Test — Data Engineer · Intermediate</footer>
+
+  <script>
+    // Red-family palette (white/red theme)
+    const RED = "#d7263d";
+    const palette = ["#d7263d","#e8536a","#a31729","#f4a9b4","#c0392b","#ff7c8a","#7d0f1d","#ef8fa0"];
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = "#2b2b2b";
+
+    const fmtIDR = v => "Rp " + Number(v).toLocaleString("id-ID");
+
+    async function get(path) {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }
+    function fail(id, e) {
+      const c = document.getElementById(id);
+      c.parentElement.innerHTML = '<p class="err">Gagal memuat data: ' + e.message +
+        '. Pastikan pipeline sudah jalan (DAG sukses).</p>';
+    }
+
+    // Q1 — line chart, one line per store
+    get("/api/revenue-by-store").then(d => {
+      new Chart(document.getElementById("c1"), {
+        type: "line",
+        data: {
+          labels: d.months,
+          datasets: d.series.map((s, i) => ({
+            label: s.store, data: s.data,
+            borderColor: palette[i % palette.length],
+            backgroundColor: palette[i % palette.length],
+            tension: .3, borderWidth: 2, pointRadius: 2
+          }))
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } } },
+          scales: { y: { ticks: { callback: v => "Rp " + (v/1e6).toFixed(1) + "jt" } } } }
+      });
+    }).catch(e => fail("c1", e));
+
+    // Q2a — top promos by total discount
+    get("/api/promotion-effectiveness").then(d => {
+      new Chart(document.getElementById("c2a"), {
+        type: "bar",
+        data: { labels: d.top_promos.map(p => p.promo),
+          datasets: [{ label: "Total Discount", data: d.top_promos.map(p => p.total_discount), backgroundColor: RED }] },
+        options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtIDR(c.raw) } } },
+          scales: { x: { ticks: { callback: v => "Rp " + (v/1e6).toFixed(1) + "jt" } } } }
+      });
+      // Q2b — promo vs non-promo avg
+      const comp = d.comparison;
+      new Chart(document.getElementById("c2b"), {
+        type: "bar",
+        data: { labels: comp.map(c => c.grp === "with_promo" ? "Dengan Promo" : "Tanpa Promo"),
+          datasets: [{ label: "Avg Nilai Transaksi", data: comp.map(c => c.avg_txn_value),
+            backgroundColor: comp.map(c => c.grp === "with_promo" ? RED : "#f4a9b4") }] },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtIDR(c.raw) } } },
+          scales: { y: { ticks: { callback: v => "Rp " + (v/1e3).toFixed(0) + "rb" } } } }
+      });
+    }).catch(e => { fail("c2a", e); fail("c2b", e); });
+
+    // Q3 — top products per city (grouped bar)
+    get("/api/top-products-by-city").then(d => {
+      const cities = [...new Set(d.rows.map(r => r.city))];
+      // up to 3 ranks per city
+      const ranks = [0, 1, 2];
+      const byCity = {};
+      cities.forEach(c => byCity[c] = d.rows.filter(r => r.city === c));
+      const datasets = ranks.map(k => ({
+        label: "#" + (k + 1),
+        data: cities.map(c => (byCity[c][k] ? byCity[c][k].revenue : 0)),
+        backgroundColor: palette[k]
+      }));
+      new Chart(document.getElementById("c3"), {
+        type: "bar",
+        data: { labels: cities, datasets },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" },
+            tooltip: { callbacks: {
+              title: items => items[0].label,
+              label: ctx => {
+                const rec = byCity[ctx.label][ctx.datasetIndex];
+                return rec ? rec.product_name + ": " + fmtIDR(rec.revenue) : "";
+              } } } },
+          scales: { y: { ticks: { callback: v => "Rp " + (v/1e6).toFixed(1) + "jt" } } } }
+      });
+    }).catch(e => fail("c3", e));
+
+    // Q4 — customer segments stacked per city
+    get("/api/customer-segments").then(d => {
+      const cities = [...new Set(d.rows.map(r => r.city))];
+      const segs = ["High", "Medium", "Low"];
+      const segColor = { High: "#a31729", Medium: "#e8536a", Low: "#f4a9b4" };
+      const datasets = segs.map(s => ({
+        label: s,
+        data: cities.map(c => {
+          const rec = d.rows.find(r => r.city === c && r.segment === s);
+          return rec ? rec.n_customers : 0;
+        }),
+        backgroundColor: segColor[s]
+      }));
+      new Chart(document.getElementById("c4"), {
+        type: "bar",
+        data: { labels: cities, datasets },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+          scales: { x: { stacked: true }, y: { stacked: true } } }
+      });
+    }).catch(e => fail("c4", e));
+
+    // Q5 — transactions by day (bar revenue + line count)
+    get("/api/transactions-by-day").then(d => {
+      const labels = d.rows.map(r => r.day_name);
+      new Chart(document.getElementById("c5"), {
+        data: {
+          labels,
+          datasets: [
+            { type: "bar", label: "Revenue", data: d.rows.map(r => r.revenue),
+              backgroundColor: "#f4a9b4", yAxisID: "y" },
+            { type: "line", label: "Jumlah Transaksi", data: d.rows.map(r => r.n_transactions),
+              borderColor: RED, backgroundColor: RED, yAxisID: "y1", tension: .3, borderWidth: 2 }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+          scales: {
+            y: { position: "left", ticks: { callback: v => "Rp " + (v/1e6).toFixed(0) + "jt" } },
+            y1: { position: "right", grid: { drawOnChartArea: false } }
+          } }
+      });
+    }).catch(e => fail("c5", e));
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+version: 2
+
+models:
+  - name: dim_store
+    description: "Store dimension (multi-tenant)."
+    columns:
+      - name: store_key
+        data_tests: [not_null, unique]
+      - name: store_id
+        data_tests: [not_null]
+      - name: store_type
+        data_tests:
+          - accepted_values: { values: ['minimarket','supermarket','express'] }
+
+  - name: dim_promotion
+    description: "Promotion dimension (multi-tenant)."
+    columns:
+      - name: promo_key
+        data_tests: [not_null, unique]
+      - name: promo_id
+        data_tests: [not_null]
+
+  - name: dim_customer_mt
+    description: "Customer dimension (multi-tenant)."
+    columns:
+      - name: customer_key
+        data_tests: [not_null, unique]
+      - name: customer_id
+        data_tests: [not_null]
+
+  - name: dim_product_mt
+    description: "Product dimension (multi-tenant)."
+    columns:
+      - name: product_key
+        data_tests: [not_null, unique]
+      - name: product_id
+        data_tests: [not_null]
+
+  - name: dim_date_mt
+    description: "Date dimension (multi-tenant range)."
+    columns:
+      - name: date_key
+        data_tests: [not_null, unique]
+      - name: date_day
+        data_tests: [not_null, unique]
+
+  - name: fct_sales
+    description: "Sales fact at transaction-item grain (multi-tenant, enriched with store_id)."
+    columns:
+      - name: sale_key
+        data_tests: [not_null, unique]
+      - name: tenant_id
+        data_tests: [not_null]
+      - name: store_id
+        description: "FK to dim_store (composite with tenant_id)."
+        data_tests: [not_null]
+      - name: product_id
+        data_tests: [not_null]
+      - name: subtotal
+        data_tests: [not_null]
+      - name: quantity
+        data_tests: [not_null]
+
+  - name: fct_promotion_usage
+    description: "Promotion-usage fact at (transaction x promo) grain (multi-tenant)."
+    columns:
+      - name: promo_usage_key
+        data_tests: [not_null, unique]
+      - name: promo_id
+        description: "FK to dim_promotion."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_promotion')
+              field: promo_id
+      - name: discount_applied
+        data_tests: [not_null]
+      - name: transaction_total
+        data_tests: [not_null]

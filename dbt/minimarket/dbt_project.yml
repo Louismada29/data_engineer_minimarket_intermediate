@@ -1,0 +1,32 @@
+name: 'minimarket'
+version: '1.0.0'
+config-version: 2
+
+profile: 'minimarket'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Two levels coexist in one project, separated by tags so each Airflow DAG
+# builds only its own models:
+#   tag:beginner      -> staging/  + marts/        (single tenant, full-load source `raw`)
+#   tag:intermediate  -> staging_mt/ + marts_mt/   (multi-tenant source `raw_mt`)
+models:
+  minimarket:
+    staging:
+      +materialized: view
+      +tags: ["beginner"]
+    marts:
+      +materialized: table
+      +tags: ["beginner"]
+    staging_mt:
+      +materialized: view
+      +tags: ["intermediate"]
+    marts_mt:
+      +materialized: table
+      +tags: ["intermediate"]

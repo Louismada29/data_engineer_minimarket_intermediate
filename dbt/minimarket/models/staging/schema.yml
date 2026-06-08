@@ -1,0 +1,76 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw landing zone in ClickHouse, loaded full-load by the Python EL script."
+    database: "{{ env_var('CLICKHOUSE_RAW_DB', 'raw') }}"
+    schema: "{{ env_var('CLICKHOUSE_RAW_DB', 'raw') }}"
+    tables:
+      - name: customers
+      - name: products
+      - name: transactions
+      - name: transaction_items
+
+models:
+  - name: stg_customers
+    description: "Cleaned customers: trimmed names, lowercased email/gender, title-cased city."
+    columns:
+      - name: customer_id
+        description: "Primary key of a customer."
+        data_tests: [not_null, unique]
+      - name: customer_name
+        description: "Customer full name."
+        data_tests: [not_null]
+      - name: city
+        description: "City the customer belongs to."
+
+  - name: stg_products
+    description: "Cleaned products with standardised category/brand."
+    columns:
+      - name: product_id
+        description: "Primary key of a product."
+        data_tests: [not_null, unique]
+      - name: product_name
+        description: "Product display name."
+        data_tests: [not_null]
+      - name: category
+        description: "Product category."
+      - name: unit_price
+        description: "List unit price (IDR)."
+        data_tests: [not_null]
+
+  - name: stg_transactions
+    description: "Cleaned transactions, filtered to status = 'completed'."
+    columns:
+      - name: transaction_id
+        description: "Primary key of a transaction."
+        data_tests: [not_null, unique]
+      - name: transaction_date
+        description: "Timestamp of the transaction."
+        data_tests: [not_null]
+      - name: payment_method
+        description: "Tender type used."
+        data_tests:
+          - accepted_values:
+              values: ['cash', 'debit', 'credit', 'e-wallet']
+      - name: status
+        description: "Always 'completed' after staging filter."
+
+  - name: stg_transaction_items
+    description: "Cleaned line items, one row per product sold within a transaction."
+    columns:
+      - name: item_id
+        description: "Primary key of a line item."
+        data_tests: [not_null, unique]
+      - name: transaction_id
+        description: "FK to a transaction (note: items for cancelled/pending txns are dropped downstream in fact_sales)."
+        data_tests: [not_null]
+      - name: product_id
+        description: "FK to stg_products."
+        data_tests:
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+      - name: quantity
+        description: "Units sold on this line."
+        data_tests: [not_null]

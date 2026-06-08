@@ -1,0 +1,21 @@
+# env
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# dbt
+dbt/minimarket/target/
+dbt/minimarket/dbt_packages/
+dbt/minimarket/logs/
+
+# jupyter
+.ipynb_checkpoints/
+
+# os
+.DS_Store
+
+# intermediate runtime state
+state/watermarks.json

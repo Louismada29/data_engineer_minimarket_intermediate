@@ -1,0 +1,5 @@
+clickhouse-connect==0.7.19
+psycopg2-binary==2.9.9
+pandas==2.2.2
+SQLAlchemy==2.0.30
+Faker==25.2.0

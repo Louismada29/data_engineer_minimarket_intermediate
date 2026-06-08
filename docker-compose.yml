@@ -1,0 +1,202 @@
+# =====================================================================
+# Minimarket ELT — full stack
+#   postgres   : OLTP source (sistem kasir minimarket)
+#   clickhouse : Data Warehouse
+#   airflow-*  : orchestration (LocalExecutor, no celery/redis)
+#   jupyter    : analytics notebook
+# Bring up with:  docker compose up -d --build
+# =====================================================================
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  image: minimarket/airflow:latest
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__WEBSERVER__SECRET_KEY: "minimarket-secret-key"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    # ---- connection settings consumed by the EL/seed scripts & dbt ----
+    PG_HOST: postgres
+    PG_PORT: "5432"
+    PG_DB: minimarket
+    PG_USER: minimarket
+    PG_PASSWORD: minimarket
+    CLICKHOUSE_HOST: clickhouse
+    CLICKHOUSE_PORT: "8123"
+    CLICKHOUSE_USER: default
+    CLICKHOUSE_PASSWORD: "clickhouse"
+    CLICKHOUSE_DB: analytics
+    CLICKHOUSE_RAW_DB: raw
+    CLICKHOUSE_RAW_MT_DB: raw_mt
+    TENANT_CONFIG: /opt/airflow/pipeline/config/tenants.json
+    WATERMARK_FILE: /opt/airflow/state/watermarks.json
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./pipeline:/opt/airflow/pipeline
+    - ./dbt:/opt/airflow/dbt
+    - ./state:/opt/airflow/state
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+
+services:
+  # ---------------------------------------------------------------- source
+  postgres:
+    image: postgres:15
+    container_name: mm-postgres
+    environment:
+      POSTGRES_USER: minimarket
+      POSTGRES_PASSWORD: minimarket
+      POSTGRES_DB: minimarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minimarket -d minimarket"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ------------------------------------------------------------------- DWH
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: mm-clickhouse
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # native
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ch-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ------------------------------------------------ airflow metadata store
+  airflow-db:
+    image: postgres:15
+    container_name: mm-airflow-db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ------------------------------------------------------- airflow init job
+  airflow-init:
+    <<: *airflow-common
+    container_name: mm-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname admin --lastname admin \
+          --role Admin --email admin@example.com || true
+    restart: on-failure
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: mm-airflow-webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: mm-airflow-scheduler
+    command: scheduler
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------------- notebook
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/jupyter/Dockerfile
+    image: minimarket/jupyter:latest
+    container_name: mm-jupyter
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: "clickhouse"
+      CLICKHOUSE_DB: analytics
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # -------------------------------------------- intermediate dashboard (API + UI)
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    image: minimarket/dashboard:latest
+    container_name: mm-dashboard
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DB: analytics
+    ports:
+      - "8000:8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+volumes:
+  pg-data:
+  ch-data:
+  airflow-db-data:
+  airflow-logs:

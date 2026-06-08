@@ -1,0 +1,7 @@
+{
+  "tenants": [
+    { "tenant_id": "jakarta",  "schema": "tenant_jakarta",  "region": "DKI Jakarta" },
+    { "tenant_id": "bandung",  "schema": "tenant_bandung",  "region": "Jawa Barat" },
+    { "tenant_id": "surabaya", "schema": "tenant_surabaya", "region": "Jawa Timur" }
+  ]
+}

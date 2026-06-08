@@ -1,0 +1,44 @@
+version: 2
+
+sources:
+  - name: raw_mt
+    description: "Multi-tenant raw landing in ClickHouse, loaded incrementally by the concurrent EL."
+    database: "{{ env_var('CLICKHOUSE_RAW_MT_DB', 'raw_mt') }}"
+    schema: "{{ env_var('CLICKHOUSE_RAW_MT_DB', 'raw_mt') }}"
+    tables:
+      - name: customers
+      - name: products
+      - name: transactions
+      - name: transaction_items
+      - name: stores
+      - name: promotions
+      - name: transaction_promotions
+      - name: suppliers
+
+models:
+  - name: stg_transactions_mt
+    description: "Multi-tenant transactions, completed only."
+    columns:
+      - name: transaction_id
+        data_tests: [not_null]
+      - name: tenant_id
+        data_tests: [not_null]
+      - name: payment_method
+        data_tests:
+          - accepted_values: { values: ['cash','debit','credit','e-wallet'] }
+  - name: stg_stores
+    description: "Multi-tenant stores."
+    columns:
+      - name: store_id
+        data_tests: [not_null]
+      - name: store_type
+        data_tests:
+          - accepted_values: { values: ['minimarket','supermarket','express'] }
+  - name: stg_promotions
+    description: "Multi-tenant promotions."
+    columns:
+      - name: promo_id
+        data_tests: [not_null]
+      - name: promo_type
+        data_tests:
+          - accepted_values: { values: ['discount','bundle','cashback'] }
